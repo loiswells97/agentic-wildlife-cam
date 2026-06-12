@@ -48,3 +48,5 @@ def play_buzzer_tune(pin_number, tune):
     buzzer.stop()
     return True
 # play_buzzer_tune(27, [('C4', 0.5), ('C4', 0.5), ('G4', 0.5), ('G4', 0.5), ('A4', 0.5), ('A4', 0.5), ('G4', 1.0)])
+
+blink_led(4, 1,1,5)

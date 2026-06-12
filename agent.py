@@ -7,7 +7,9 @@ from gpio import play_buzzer_tune
 from gpiozero import LED, Buzzer
 from time import sleep
 from sense_hat import SenseHat
+from twilio.rest import Client
 import os
+
 from picamzero import Camera
 from datetime import datetime
 import threading
@@ -16,7 +18,14 @@ cam = Camera()
 
 dotenv.load_dotenv()
 
-client = anthropic.Anthropic()
+anthropic_client = anthropic.Anthropic()
+
+ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+
+MY_WHATSAPP = os.getenv("MY_WHATSAPP")
+TWILIO_WHATSAPP = os.getenv("TWILIO_WHATSAPP")
+
 
 _buzzer_lock = threading.Lock()
 
@@ -81,7 +90,29 @@ TOOLS = [
             },
             "required": ["tune"]
         }
+    },
+    {
+        "name": "take_picture",
+        "description": "Take a picture, returns content of the image",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    }, 
+    {
+    "name": "send_whatsapp",
+    "description": "Send a WhatsApp message to Artemis",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "message": {
+                "type": "string"
+            }
+        },
+        "required": ["message"]
     }
+}
 ]
 
 def set_display_colour(red: int, green: int, blue: int) -> str:
@@ -138,17 +169,52 @@ def play_tune(tune):
 
     return "Started playing tune in background"
 
+def take_picture():
+    """Take a picture and return the image"""
+    
+    # Clear any pictures from a previous run
+    for old in Path("temp").glob("picture.jpg"):
+        old.unlink()
+
+    cam.take_photo("temp/picture.jpg")
+
+    blocks = [{"type": "text", "text": "Picture taken:"}]
+    data = base64.standard_b64encode(Path("temp/picture.jpg").read_bytes()).decode("utf-8")
+    blocks.append({
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/jpeg", "data": data},
+    })
+    return blocks
+
+def send_whatsapp(message: str):
+    client = Client(
+        ACCOUNT_SID,
+        AUTH_TOKEN
+    )
+
+    client.messages.create(
+        from_=TWILIO_WHATSAPP,
+        to=MY_WHATSAPP,
+        body=message
+    )
+
+    return "WhatsApp message sent"
+
 def run_tool(name: str, arguments: dict):
     try:
-        if name == "set_display_colour":
-            return set_display_colour(int(arguments["red"]), int(arguments["green"]), int(arguments["blue"]))
-        if name == "set_display_pixels":
-            return set_display_pixels(arguments["pixels"])
+        # if name == "set_display_colour":
+        #     return set_display_colour(int(arguments["red"]), int(arguments["green"]), int(arguments["blue"]))
+        # if name == "set_display_pixels":
+        #     return set_display_pixels(arguments["pixels"])
         if name == "start_video":
             return start_video()
         if name == "play_tune":
             return play_tune(arguments["tune"])
 
+        if name == "take_picture":
+            return take_picture()
+        if name == "send_whatsapp":
+            return send_whatsapp(arguments["message"])
     except Exception as e:
         return f"Error: {type(e).__name__}: {e}"
     raise ValueError(f"Unknown tool: {name}")
@@ -159,7 +225,7 @@ def agent(prompt: str, max_turns: int=10) -> str:
     for turn in range(1, max_turns + 1):
         print(f"\n--- Turn {turn} ---")
 
-        response = client.messages.create(
+        response = anthropic_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
             tools=TOOLS,
@@ -198,4 +264,4 @@ def agent(prompt: str, max_turns: int=10) -> str:
 #     turn the display into a checkerboard of blue and red
 # """)
 
-agent("take a video and summarise what's in it")
+agent("scare away the cat in my garden and notify me when it's gone")

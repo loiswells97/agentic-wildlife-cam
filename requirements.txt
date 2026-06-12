@@ -40,3 +40,5 @@ tqdm==4.68.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 videodev2==0.0.4
+twilio>=9,<10
+
