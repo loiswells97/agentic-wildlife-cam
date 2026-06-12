@@ -3,6 +3,7 @@ import dotenv
 import base64
 from pathlib import Path
 import subprocess
+from gpio import play_buzzer_tune
 from gpiozero import LED, Buzzer
 from time import sleep
 from sense_hat import SenseHat
@@ -11,6 +12,8 @@ import os
 
 from picamzero import Camera
 from datetime import datetime
+import threading
+
 cam = Camera()
 
 dotenv.load_dotenv()
@@ -23,6 +26,8 @@ AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 MY_WHATSAPP = os.getenv("MY_WHATSAPP")
 TWILIO_WHATSAPP = os.getenv("TWILIO_WHATSAPP")
 
+
+_buzzer_lock = threading.Lock()
 
 TOOLS = [
     {
@@ -56,6 +61,34 @@ TOOLS = [
             "type": "object",
             "properties": {},
             "required": []
+        }
+    },
+    {
+        "name": "play_tune",
+        "description": "Play a tune asynchronously through the buzzer, with the tune being a list of pairs of tone names and durations in seconds. Valid notes are A3 to A5 (e.g. A3, C4, C#4, D4, E4, F4, G4, A4, B4, C5, A5).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tune": {
+                    "type": "array",
+                    "description": "Notes to play in order",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "note": {
+                                "type": "string",
+                                "description": "Note name, e.g. C4, D4, E4, F4, G4, A4, B4"
+                            },
+                            "duration": {
+                                "type": "number",
+                                "description": "How long to hold the note, in seconds"
+                            }
+                        },
+                        "required": ["note", "duration"]
+                    }
+                }
+            },
+            "required": ["tune"]
         }
     },
     {
@@ -124,6 +157,18 @@ def start_video():
         })
     return blocks
 
+def play_tune(tune):
+    notes = [(item["note"], item["duration"]) for item in tune]
+    pin = int(os.getenv("BUZZER_PIN"))
+
+    def _play():
+        with _buzzer_lock:
+            play_buzzer_tune(pin, notes)
+
+    thread = threading.Thread(target=_play, daemon=True).start()
+
+    return "Started playing tune in background"
+
 def take_picture():
     """Take a picture and return the image"""
     
@@ -157,12 +202,15 @@ def send_whatsapp(message: str):
 
 def run_tool(name: str, arguments: dict):
     try:
-        if name == "set_display_colour":
-            return set_display_colour(int(arguments["red"]), int(arguments["green"]), int(arguments["blue"]))
-        if name == "set_display_pixels":
-            return set_display_pixels(arguments["pixels"])
+        # if name == "set_display_colour":
+        #     return set_display_colour(int(arguments["red"]), int(arguments["green"]), int(arguments["blue"]))
+        # if name == "set_display_pixels":
+        #     return set_display_pixels(arguments["pixels"])
         if name == "start_video":
             return start_video()
+        if name == "play_tune":
+            return play_tune(arguments["tune"])
+
         if name == "take_picture":
             return take_picture()
         if name == "send_whatsapp":
@@ -216,4 +264,4 @@ def agent(prompt: str, max_turns: int=10) -> str:
 #     turn the display into a checkerboard of blue and red
 # """)
 
-agent("take a video and summarise what's in it")
+agent("scare away the cat in my garden and notify me when it's gone")
