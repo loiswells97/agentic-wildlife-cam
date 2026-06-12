@@ -53,7 +53,7 @@ TOOLS = [
     },
     {
         "name": "play_tune",
-        "description": "Play a tune through the buzzer, with the tune being a list of pairs of tone names and durations in seconds, e.g. [('C4', 0.5), ('C4', 0.5), ('G4', 0.5), ('G4', 0.5), ('A4', 0.5), ('A4', 0.5), ('G4', 1.0)]",
+        "description": "Play a tune through the buzzer, with the tune being a list of pairs of tone names and durations in seconds. Valid notes are A3 to A5 (e.g. A3, C4, C#4, D4, E4, F4, G4, A4, B4, C5, A5).",
         "input_schema": {
             "type": "object",
             "properties": {
