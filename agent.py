@@ -10,12 +10,15 @@ from sense_hat import SenseHat
 import os
 from picamzero import Camera
 from datetime import datetime
+import threading
 
 cam = Camera()
 
 dotenv.load_dotenv()
 
 client = anthropic.Anthropic()
+
+_buzzer_lock = threading.Lock()
 
 TOOLS = [
     {
@@ -53,7 +56,7 @@ TOOLS = [
     },
     {
         "name": "play_tune",
-        "description": "Play a tune through the buzzer, with the tune being a list of pairs of tone names and durations in seconds. Valid notes are A3 to A5 (e.g. A3, C4, C#4, D4, E4, F4, G4, A4, B4, C5, A5).",
+        "description": "Play a tune asynchronously through the buzzer, with the tune being a list of pairs of tone names and durations in seconds. Valid notes are A3 to A5 (e.g. A3, C4, C#4, D4, E4, F4, G4, A4, B4, C5, A5).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -125,8 +128,15 @@ def start_video():
 
 def play_tune(tune):
     notes = [(item["note"], item["duration"]) for item in tune]
-    play_buzzer_tune(int(os.getenv("BUZZER_PIN")), notes)
-    return "Played tune through the buzzer"
+    pin = int(os.getenv("BUZZER_PIN"))
+
+    def _play():
+        with _buzzer_lock:
+            play_buzzer_tune(pin, notes)
+
+    thread = threading.Thread(target=_play, daemon=True).start()
+
+    return "Started playing tune in background"
 
 def run_tool(name: str, arguments: dict):
     try:
