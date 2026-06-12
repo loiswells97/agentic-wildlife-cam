@@ -48,6 +48,15 @@ TOOLS = [
             "properties": {},
             "required": []
         }
+    },
+    {
+        "name": "take_picture",
+        "description": "Take a picture, returns content of the image",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
     }
 ]
 
@@ -93,6 +102,23 @@ def start_video():
         })
     return blocks
 
+def take_picture():
+    """Take a picture and return the image"""
+    
+    # Clear any pictures from a previous run
+    for old in Path("temp").glob("picture.jpg"):
+        old.unlink()
+
+    cam.take_photo("temp/picture.jpg")
+
+    blocks = [{"type": "text", "text": "Picture taken:"}]
+    data = base64.standard_b64encode(Path("temp/picture.jpg").read_bytes()).decode("utf-8")
+    blocks.append({
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/jpeg", "data": data},
+    })
+    return blocks
+
 def run_tool(name: str, arguments: dict):
     try:
         if name == "set_display_colour":
@@ -101,6 +127,8 @@ def run_tool(name: str, arguments: dict):
             return set_display_pixels(arguments["pixels"])
         if name == "start_video":
             return start_video()
+        if name == "take_picture":
+            return take_picture()
 
     except Exception as e:
         return f"Error: {type(e).__name__}: {e}"
