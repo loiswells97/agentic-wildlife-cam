@@ -6,6 +6,8 @@ import subprocess
 from gpiozero import LED, Buzzer
 from time import sleep
 from sense_hat import SenseHat
+from twilio.rest import Client
+import os
 
 from picamzero import Camera
 from datetime import datetime
@@ -13,7 +15,14 @@ cam = Camera()
 
 dotenv.load_dotenv()
 
-client = anthropic.Anthropic()
+anthropic_client = anthropic.Anthropic()
+
+ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+
+MY_WHATSAPP = os.getenv("MY_WHATSAPP")
+TWILIO_WHATSAPP = os.getenv("TWILIO_WHATSAPP")
+
 
 TOOLS = [
     {
@@ -57,7 +66,20 @@ TOOLS = [
             "properties": {},
             "required": []
         }
+    }, 
+    {
+    "name": "send_whatsapp",
+    "description": "Send a WhatsApp message to Artemis",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "message": {
+                "type": "string"
+            }
+        },
+        "required": ["message"]
     }
+}
 ]
 
 def set_display_colour(red: int, green: int, blue: int) -> str:
@@ -119,6 +141,20 @@ def take_picture():
     })
     return blocks
 
+def send_whatsapp(message: str):
+    client = Client(
+        ACCOUNT_SID,
+        AUTH_TOKEN
+    )
+
+    client.messages.create(
+        from_=TWILIO_WHATSAPP,
+        to=MY_WHATSAPP,
+        body=message
+    )
+
+    return "WhatsApp message sent"
+
 def run_tool(name: str, arguments: dict):
     try:
         if name == "set_display_colour":
@@ -129,7 +165,8 @@ def run_tool(name: str, arguments: dict):
             return start_video()
         if name == "take_picture":
             return take_picture()
-
+        if name == "send_whatsapp":
+            return send_whatsapp(arguments["message"])
     except Exception as e:
         return f"Error: {type(e).__name__}: {e}"
     raise ValueError(f"Unknown tool: {name}")
@@ -140,7 +177,7 @@ def agent(prompt: str, max_turns: int=10) -> str:
     for turn in range(1, max_turns + 1):
         print(f"\n--- Turn {turn} ---")
 
-        response = client.messages.create(
+        response = anthropic_client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
             tools=TOOLS,
