@@ -3,12 +3,14 @@ import dotenv
 import base64
 from pathlib import Path
 import subprocess
+from gpio import play_buzzer_tune
 from gpiozero import LED, Buzzer
 from time import sleep
 from sense_hat import SenseHat
-
+import os
 from picamzero import Camera
 from datetime import datetime
+
 cam = Camera()
 
 dotenv.load_dotenv()
@@ -47,6 +49,34 @@ TOOLS = [
             "type": "object",
             "properties": {},
             "required": []
+        }
+    },
+    {
+        "name": "play_tune",
+        "description": "Play a tune through the buzzer, with the tune being a list of pairs of tone names and durations in seconds, e.g. [('C4', 0.5), ('C4', 0.5), ('G4', 0.5), ('G4', 0.5), ('A4', 0.5), ('A4', 0.5), ('G4', 1.0)]",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tune": {
+                    "type": "array",
+                    "description": "Notes to play in order",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "note": {
+                                "type": "string",
+                                "description": "Note name, e.g. C4, D4, E4, F4, G4, A4, B4"
+                            },
+                            "duration": {
+                                "type": "number",
+                                "description": "How long to hold the note, in seconds"
+                            }
+                        },
+                        "required": ["note", "duration"]
+                    }
+                }
+            },
+            "required": ["tune"]
         }
     }
 ]
@@ -93,6 +123,11 @@ def start_video():
         })
     return blocks
 
+def play_tune(tune):
+    notes = [(item["note"], item["duration"]) for item in tune]
+    play_buzzer_tune(os.getenv("BUZZER_PIN"), tune)
+    return "Played tune through the buzzer"
+
 def run_tool(name: str, arguments: dict):
     try:
         if name == "set_display_colour":
@@ -101,6 +136,8 @@ def run_tool(name: str, arguments: dict):
             return set_display_pixels(arguments["pixels"])
         if name == "start_video":
             return start_video()
+        if name == "play_tune":
+            return play_tune(arguments["tune"])
 
     except Exception as e:
         return f"Error: {type(e).__name__}: {e}"

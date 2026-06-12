@@ -26,6 +26,6 @@ def play_buzzer_tune(pin_number, tune):
         sleep(0.1)
 
     # Turn off completely when finished
-    buzzer.off()
+    buzzer.stop()
 
-play_buzzer_tune(17, [('C4', 0.5), ('C4', 0.5), ('G4', 0.5), ('G4', 0.5), ('A4', 0.5), ('A4', 0.5), ('G4', 1.0)])
+# play_buzzer_tune(27, [('C4', 0.5), ('C4', 0.5), ('G4', 0.5), ('G4', 0.5), ('A4', 0.5), ('A4', 0.5), ('G4', 1.0)])
