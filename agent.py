@@ -1,5 +1,6 @@
 import anthropic
 import dotenv
+import base64
 from pathlib import Path
 import subprocess
 from gpiozero import LED, Buzzer
@@ -62,16 +63,37 @@ def set_display_pixels(pixels) -> str:
     sense.set_pixels(pixels)
     return "Done!" 
 
-def start_video() -> str:
-    now = datetime.now()
-    cam.take_video(f"temp/wildlife.mp4", 1)
-    uploaded = client.beta.files.upload(
-        file=(f"wildlife.mp4", open(f"temp/wildlife.mp4", "rb"), "application/mp4" )
-    )
-    print(uploaded)
-    return str(uploaded)
+def start_video():
+    """Record a short clip and return sampled frames as image content blocks.
 
-def run_tool(name: str, arguments: dict) -> str:
+    Claude can't read video directly, so we extract ~1 frame/sec with ffmpeg
+    and hand them back as a sequence of images for the model to inspect.
+    """
+    cam.take_video("temp/wildlife.mp4", 10)
+
+    # Clear any frames from a previous run, then sample 1 frame per second.
+    for old in Path("temp").glob("frame_*.jpg"):
+        old.unlink()
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", "temp/wildlife.mp4", "-vf", "fps=1", "temp/frame_%03d.jpg"],
+        check=True,
+        capture_output=True,
+    )
+
+    frames = sorted(Path("temp").glob("frame_*.jpg"))
+    if not frames:
+        return "Error: no frames extracted from the recording"
+
+    blocks = [{"type": "text", "text": f"{len(frames)} frames sampled from a 10s clip, in order:"}]
+    for frame in frames:
+        data = base64.standard_b64encode(frame.read_bytes()).decode("utf-8")
+        blocks.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": data},
+        })
+    return blocks
+
+def run_tool(name: str, arguments: dict):
     try:
         if name == "set_display_colour":
             return set_display_colour(int(arguments["red"]), int(arguments["green"]), int(arguments["blue"]))
@@ -106,8 +128,11 @@ def agent(prompt: str, max_turns: int=10) -> str:
             elif block.type == "tool_use":
                 print(f"[tool call] {block.name}({block.input})")
                 result = run_tool(block.name, block.input)
-                is_error = result.startswith("Error:")
-                print(f"[tool result] {result[:200]}{'...' if len(result) > 200 else ''}")
+                is_error = isinstance(result, str) and result.startswith("Error:")
+                if isinstance(result, str):
+                    print(f"[tool result] {result[:200]}{'...' if len(result) > 200 else ''}")
+                else:
+                    print(f"[tool result] {len(result)} content blocks")
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
