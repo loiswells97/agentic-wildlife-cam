@@ -125,7 +125,7 @@ def start_video():
 
 def play_tune(tune):
     notes = [(item["note"], item["duration"]) for item in tune]
-    play_buzzer_tune(os.getenv("BUZZER_PIN"), tune)
+    play_buzzer_tune(int(os.getenv("BUZZER_PIN")), notes)
     return "Played tune through the buzzer"
 
 def run_tool(name: str, arguments: dict):
