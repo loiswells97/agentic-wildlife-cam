@@ -3,16 +3,15 @@ import dotenv
 import base64
 from pathlib import Path
 import subprocess
-from gpio import play_buzzer_tune, play_rgb_led_pattern
-from gpiozero import LED, Buzzer
-from time import sleep
-from sense_hat import SenseHat
+from gpiozero import MotionSensor
+from gpio import play_buzzer_tune, play_rgb_led_pattern, check_motion_sensor
 from twilio.rest import Client
 import os
 
 from picamzero import Camera
 from datetime import datetime
 import threading
+from time import sleep
 
 cam = Camera()
 
@@ -27,7 +26,7 @@ MY_WHATSAPP = os.getenv("MY_WHATSAPP")
 TWILIO_WHATSAPP = os.getenv("TWILIO_WHATSAPP")
 
 VALID_NOTES = ["A3", "A#3" "B3", "C4", "B#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4", "C5", "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5", "G#5", "A5"]
-
+pir = MotionSensor(os.getenv("MOTION_SENSOR_PIN"))
 
 _buzzer_lock = threading.Lock()
 
@@ -105,7 +104,16 @@ TOOLS = [
             },
             "required": ["pattern"]
         }
-    }, 
+    },
+    {
+        "name": "check_for_motion",
+        "description": "Check whether there is motion using a PIR sensor",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
     {
         "name": "send_whatsapp",
         "description": "Send a WhatsApp message to Artemis",
@@ -171,6 +179,13 @@ def show_rgb_led_pattern(pattern):
     play_rgb_led_pattern(os.getenv("RGB_LED_RED_PIN"), os.getenv("RGB_LED_GREEN_PIN"), os.getenv("RGB_LED_BLUE_PIN"), led_pattern)
     return "Successfully played RGB LED pattern"
 
+def check_for_motion():
+    is_motion = check_motion_sensor(pir)
+    if is_motion:
+        return "Motion detected"
+    else:
+        return "No motion detected"
+
 def take_picture():
     """Take a picture and return the image"""
     
@@ -210,6 +225,8 @@ def run_tool(name: str, arguments: dict):
             return play_tune(arguments["tune"])
         if name == "show_rgb_led_pattern":
             return show_rgb_led_pattern(arguments["pattern"])
+        if name == "check_for_motion":
+            return check_for_motion()
         if name == "take_picture":
             return take_picture()
         if name == "send_whatsapp":
@@ -264,5 +281,16 @@ def agent(prompt: str, max_turns: int=10) -> str:
 # """)
 
 # agent("scare away the cat in my garden and notify me when it's gone")
-agent('scare away the cat in my garden')
+# agent('movement was detected in my garden! check whether it\'s a cat and if so scare it off! make sure it\'s gone and if not keep scaring')
 # agent('take a photo and describe what is in it')
+# agent('check to see if there\'s motion, and if so tell me what\'s there')
+
+print("Warming up the motion sensor for 30s....")
+sleep(30)
+print("Ready...")
+
+while True:
+    if pir.motion_detected:
+        agent('scare the cat off from my garden')
+    else:
+        sleep(0.5)

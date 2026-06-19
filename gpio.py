@@ -1,4 +1,4 @@
-from gpiozero import LED, RGBLED, TonalBuzzer
+from gpiozero import LED, RGBLED, TonalBuzzer, MotionSensor
 from time import sleep
 
 def turn_on_led(pin_number):
@@ -47,6 +47,11 @@ def play_buzzer_tune(pin_number, tune):
     # Turn off completely when finished
     buzzer.stop()
     return True
+
+def check_motion_sensor(pir):
+    return pir.motion_detected
+
+
 # play_buzzer_tune(27, [('C4', 0.5), ('C4', 0.5), ('G4', 0.5), ('G4', 0.5), ('A4', 0.5), ('A4', 0.5), ('G4', 1.0)])
 
 # blink_led(4, 1,1,5)
