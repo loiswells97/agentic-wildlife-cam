@@ -49,4 +49,6 @@ def play_buzzer_tune(pin_number, tune):
     return True
 # play_buzzer_tune(27, [('C4', 0.5), ('C4', 0.5), ('G4', 0.5), ('G4', 0.5), ('A4', 0.5), ('A4', 0.5), ('G4', 1.0)])
 
-blink_led(4, 1,1,5)
+# blink_led(4, 1,1,5)
+
+# play_rgb_led_pattern(26,19,13,[({'red': 1, 'green': 0,'blue': 0},1)])
