@@ -217,6 +217,9 @@ def send_whatsapp(message: str):
 
     return "WhatsApp message sent"
 
+def write_memory(text):
+    return "Wrote text to memory"
+
 def run_tool(name: str, arguments: dict):
     try:
         if name == "start_video":
