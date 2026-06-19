@@ -129,7 +129,7 @@ TOOLS = [
     },
     {
         "name": "write_memory",
-        "description": "Write text to the memory to be loaded up next time the agent is run",
+        "description": "Append text to the memory to be loaded up next time the agent is run",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -297,15 +297,6 @@ def agent(prompt: str, max_turns: int=10) -> str:
         messages.append({"role": "user", "content": tool_results})
 
     raise RuntimeError(f"Agent did not terminate within {max_turns} turns.")
-
-# agent("""
-#     turn the display into a checkerboard of blue and red
-# """)
-
-# agent("scare away the cat in my garden and notify me when it's gone")
-# agent('movement was detected in my garden! check whether it\'s a cat and if so scare it off! make sure it\'s gone and if not keep scaring')
-# agent('take a photo and describe what is in it')
-# agent('check to see if there\'s motion, and if so tell me what\'s there')
 
 print("Warming up the motion sensor for 30s....")
 sleep(30)
