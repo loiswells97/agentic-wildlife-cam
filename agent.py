@@ -14,12 +14,6 @@ from datetime import datetime
 import threading
 from time import sleep
 
-# just setting up a fake camera so i can test the messaging function
-if platform.system() == "Linux":
-    from picamzero import Camera
-    cam = Camera()
-else:
-    from mock_camera import take_picture, start_video
 
 cam = Camera()
 

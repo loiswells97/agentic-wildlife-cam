@@ -223,4 +223,4 @@ temp/*
 
 mock_camera.py
 memory.json
-
+.venv.old
