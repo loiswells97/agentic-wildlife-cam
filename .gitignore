@@ -220,3 +220,7 @@ __marimo__/
 
 temp/*
 .lgd-nfy0
+
+mock_camera.py
+memory.json
+

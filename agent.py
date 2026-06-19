@@ -7,11 +7,19 @@ from gpiozero import MotionSensor
 from gpio import play_buzzer_tune, play_rgb_led_pattern, check_motion_sensor
 from twilio.rest import Client
 import os
+import platform
 
 from picamzero import Camera
 from datetime import datetime
 import threading
 from time import sleep
+
+# just setting up a fake camera so i can test the messaging function
+if platform.system() == "Linux":
+    from picamzero import Camera
+    cam = Camera()
+else:
+    from mock_camera import take_picture, start_video
 
 cam = Camera()
 
