@@ -3,14 +3,16 @@ import dotenv
 import base64
 from pathlib import Path
 import subprocess
-from gpiozero import LED, Buzzer
-from time import sleep
-from sense_hat import SenseHat
+from gpiozero import MotionSensor
+from gpio import play_buzzer_tune, play_rgb_led_pattern, check_motion_sensor
 from twilio.rest import Client
 import os
 
 from picamzero import Camera
 from datetime import datetime
+import threading
+from time import sleep
+
 cam = Camera()
 
 dotenv.load_dotenv()
@@ -23,32 +25,12 @@ AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 MY_WHATSAPP = os.getenv("MY_WHATSAPP")
 TWILIO_WHATSAPP = os.getenv("TWILIO_WHATSAPP")
 
+VALID_NOTES = ["A3", "A#3" "B3", "C4", "B#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4", "C5", "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5", "G#5", "A5"]
+pir = MotionSensor(os.getenv("MOTION_SENSOR_PIN"))
+
+_buzzer_lock = threading.Lock()
 
 TOOLS = [
-    {
-        "name": "set_display_colour",
-        "description": "Set the colour of the 8x8 pixel display using RGB",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "red": {"type": "integer"},
-                "green": {"type": "integer"},
-                "blue": {"type": "integer"}
-            },
-            "required": ["red", "green", "blue"]
-        }
-    },
-    {
-        "name": "set_display_pixels",
-        "description": "Set colours of the 8x8 display via a list of 64 lists of RGB values, one for each pixel",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "pixels": {"type": "array"}
-            },
-            "required": ["pixels"]
-        }
-    },
     {
         "name": "start_video",
         "description": "Take a 10 second recording, returns content of video",
@@ -66,33 +48,86 @@ TOOLS = [
             "properties": {},
             "required": []
         }
-    }, 
+    },
     {
-    "name": "send_whatsapp",
-    "description": "Send a WhatsApp message to Artemis",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "message": {
-                "type": "string"
-            }
-        },
-        "required": ["message"]
+        "name": "play_tune",
+        "description": f"Play a tune asynchronously through the buzzer, with the tune being a list of pairs of tone names and durations in seconds. Valid notes are {', '.join(VALID_NOTES)}.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tune": {
+                    "type": "array",
+                    "description": "Notes to play in order",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "note": {
+                                "type": "string",
+                                "description": "Note name, e.g. C4, D4, E4, F4, G4, A4, B4"
+                            },
+                            "duration": {
+                                "type": "number",
+                                "description": "How long to hold the note, in seconds"
+                            }
+                        },
+                        "required": ["note", "duration"]
+                    }
+                }
+            },
+            "required": ["tune"]
+        }
+    },
+    {
+        "name": "show_rgb_led_pattern",
+        "description": "Play a pattern of colours on an RBG LED, with the pattern composed of a list of pairs of colours and durations in seconds. Each colour is given by a tuple of numbers between 0 and 1 inclusive for red, green and blue respectively",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "array",
+                    "description": "Colours to show in order with their respective durations",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "colour": {
+                                "type": "array",
+                                "description": "Colour tuple of three numbers between 0 and 1 inclusive for red, green and blue respectively e.g. [0,1,0]",
+                            },
+                            "duration": {
+                                "type": "number",
+                                "description": "How long to show the colour, in seconds"
+                            }
+                        },
+                        "required": ["colour", "duration"]
+                    }
+                }
+            },
+            "required": ["pattern"]
+        }
+    },
+    {
+        "name": "check_for_motion",
+        "description": "Check whether there is motion using a PIR sensor",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "send_whatsapp",
+        "description": "Send a WhatsApp message to Artemis",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            },
+            "required": ["message"]
+        }
     }
-}
 ]
-
-def set_display_colour(red: int, green: int, blue: int) -> str:
-    sense = SenseHat()
-    colour = [red, green, blue]
-    pixels = [ colour ] * 64
-    sense.set_pixels(pixels)
-    return "Done!"
-
-def set_display_pixels(pixels) -> str:
-    sense = SenseHat()
-    sense.set_pixels(pixels)
-    return "Done!" 
 
 def start_video():
     """Record a short clip and return sampled frames as image content blocks.
@@ -123,6 +158,33 @@ def start_video():
             "source": {"type": "base64", "media_type": "image/jpeg", "data": data},
         })
     return blocks
+
+def play_tune(tune):
+    for item in tune:
+        if item["note"] not in VALID_NOTES:
+            return f"Invalid note {item['note']}. Valid notes are in the range A3 to A5. Please try again."
+    notes = [(item["note"], item["duration"]) for item in tune]
+    pin = int(os.getenv("BUZZER_PIN"))
+
+    def _play():
+        with _buzzer_lock:
+            play_buzzer_tune(pin, notes)
+
+    thread = threading.Thread(target=_play, daemon=True).start()
+
+    return "Started playing tune in background"
+
+def show_rgb_led_pattern(pattern):
+    led_pattern = [(item["colour"], item["duration"]) for item in pattern]
+    play_rgb_led_pattern(os.getenv("RGB_LED_RED_PIN"), os.getenv("RGB_LED_GREEN_PIN"), os.getenv("RGB_LED_BLUE_PIN"), led_pattern)
+    return "Successfully played RGB LED pattern"
+
+def check_for_motion():
+    is_motion = check_motion_sensor(pir)
+    if is_motion:
+        return "Motion detected"
+    else:
+        return "No motion detected"
 
 def take_picture():
     """Take a picture and return the image"""
@@ -157,12 +219,14 @@ def send_whatsapp(message: str):
 
 def run_tool(name: str, arguments: dict):
     try:
-        if name == "set_display_colour":
-            return set_display_colour(int(arguments["red"]), int(arguments["green"]), int(arguments["blue"]))
-        if name == "set_display_pixels":
-            return set_display_pixels(arguments["pixels"])
         if name == "start_video":
             return start_video()
+        if name == "play_tune":
+            return play_tune(arguments["tune"])
+        if name == "show_rgb_led_pattern":
+            return show_rgb_led_pattern(arguments["pattern"])
+        if name == "check_for_motion":
+            return check_for_motion()
         if name == "take_picture":
             return take_picture()
         if name == "send_whatsapp":
@@ -216,4 +280,17 @@ def agent(prompt: str, max_turns: int=10) -> str:
 #     turn the display into a checkerboard of blue and red
 # """)
 
-agent("take a video and summarise what's in it")
+# agent("scare away the cat in my garden and notify me when it's gone")
+# agent('movement was detected in my garden! check whether it\'s a cat and if so scare it off! make sure it\'s gone and if not keep scaring')
+# agent('take a photo and describe what is in it')
+# agent('check to see if there\'s motion, and if so tell me what\'s there')
+
+print("Warming up the motion sensor for 30s....")
+sleep(30)
+print("Ready...")
+
+while True:
+    if pir.motion_detected:
+        agent('scare the cat off from my garden')
+    else:
+        sleep(0.5)
