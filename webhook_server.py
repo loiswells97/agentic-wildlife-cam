@@ -26,8 +26,6 @@ def load_memory():
 def save_memory(memory):
     Path(MEMORY_FILE).write_text(json.dumps(memory, indent=2))
 
-memory = load_memory()
-
 anthropic_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 NGROK_URL = os.getenv("NGROK_URL")  # e.g. https://armhole-commence-distaste.ngrok-free.dev
@@ -54,6 +52,8 @@ async def whatsapp_reply(request: Request):
 
     print(f"Received from {from_number}: {body}")
 
+    # Reload fresh each request to pick up messages written by agent.py
+    memory = load_memory()
     memory["conversation_history"].append({"role": "user", "content": body})
 
     # Build system prompt with preferences
@@ -71,7 +71,7 @@ async def whatsapp_reply(request: Request):
     memory["conversation_history"].append({"role": "assistant", "content": assistant_message})
 
     # Check if user is setting preferences
-    _update_preferences(body, assistant_message)
+    _update_preferences(body, assistant_message, memory)
 
     save_memory(memory)
 
@@ -99,7 +99,7 @@ def _wants_picture(body: str) -> bool:
     return any(k in body.lower() for k in keywords)
 
 
-def _update_preferences(user_msg: str, assistant_reply: str):
+def _update_preferences(user_msg: str, assistant_reply: str, memory: dict):
     """Use Claude to extract preference updates."""
     extraction = anthropic_client.messages.create(
         model="claude-sonnet-4-6",
