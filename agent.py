@@ -128,6 +128,19 @@ TOOLS = [
             },
             "required": ["message"]
         }
+    },
+    {
+        "name": "write_memory",
+        "description": "Append text to the memory to be loaded up next time the agent is run",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": ["text"]
+        }
     }
 ]
 
@@ -219,6 +232,13 @@ def send_whatsapp(message: str):
 
     return "WhatsApp message sent"
 
+def write_memory(text):
+    # Append to memory file with timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open("memory/wildlife_cam.md", "a") as f:
+        f.write(f"{timestamp} - {text}\n")
+    return "Wrote text to memory"
+
 def run_tool(name: str, arguments: dict):
     try:
         if name == "start_video":
@@ -233,6 +253,8 @@ def run_tool(name: str, arguments: dict):
             return take_picture()
         if name == "send_whatsapp":
             return send_whatsapp(arguments["message"])
+        if name == "write_memory":
+            return write_memory(arguments["text"])
     except Exception as e:
         return f"Error: {type(e).__name__}: {e}"
     raise ValueError(f"Unknown tool: {name}")
@@ -278,21 +300,16 @@ def agent(prompt: str, max_turns: int=10) -> str:
 
     raise RuntimeError(f"Agent did not terminate within {max_turns} turns.")
 
-# agent("""
-#     turn the display into a checkerboard of blue and red
-# """)
-
-# agent("scare away the cat in my garden and notify me when it's gone")
-# agent('movement was detected in my garden! check whether it\'s a cat and if so scare it off! make sure it\'s gone and if not keep scaring')
-# agent('take a photo and describe what is in it')
-# agent('check to see if there\'s motion, and if so tell me what\'s there')
-
 print("Warming up the motion sensor for 30s....")
 sleep(30)
 print("Ready...")
 
 while True:
     if pir.motion_detected:
-        agent('scare the cat off from my garden')
+        prompt = Path("prompts/wildlife_cam.md").read_text()
+        memory = Path("memory/wildlife_cam.md").read_text()
+        prompt_with_memory = f"{prompt}\n\nMemory:\n{memory}"
+        print(prompt_with_memory)
+        agent(prompt_with_memory)
     else:
         sleep(0.5)
