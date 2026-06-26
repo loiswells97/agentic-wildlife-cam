@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 from gpiozero import MotionSensor
 from gpio import play_buzzer_tune, play_rgb_led_pattern, check_motion_sensor
+from classifier import classify_image
 from twilio.rest import Client
 import os
 
@@ -49,8 +50,8 @@ TOOLS = [
         }
     },
     {
-        "name": "take_picture",
-        "description": "Take a picture, returns content of the image",
+        "name": "identify_animal",
+        "description": "Take a photo with the camera and classify the animal using a local model. Returns the animal name and confidence score (0-1). Call again if confidence is low or the result is unknown.",
         "input_schema": {
             "type": "object",
             "properties": {},
@@ -207,22 +208,20 @@ def check_for_motion():
     else:
         return "No motion detected"
 
-def take_picture():
-    """Take a picture and return the image"""
-    
-    # Clear any pictures from a previous run
-    for old in Path("temp").glob("picture.jpg"):
-        old.unlink()
+def identify_animal():
+    """Take a photo and return local classifier result as text for the LLM."""
+    Path("temp").mkdir(exist_ok=True)
+    picture_path = Path("temp/picture.jpg")
 
-    cam.take_photo("temp/picture.jpg")
+    if picture_path.exists():
+        picture_path.unlink()
 
-    blocks = [{"type": "text", "text": "Picture taken:"}]
-    data = base64.standard_b64encode(Path("temp/picture.jpg").read_bytes()).decode("utf-8")
-    blocks.append({
-        "type": "image",
-        "source": {"type": "base64", "media_type": "image/jpeg", "data": data},
-    })
-    return blocks
+    cam.take_photo(str(picture_path))
+    result = classify_image(str(picture_path))
+
+    animal = result["animal"]
+    confidence = result["confidence"]
+    return f"animal={animal}, confidence={confidence}"
 
 def send_whatsapp(message: str):
     client = Client(
@@ -255,8 +254,8 @@ def run_tool(name: str, arguments: dict):
             return show_rgb_led_pattern(arguments["pattern"])
         if name == "check_for_motion":
             return check_for_motion()
-        if name == "take_picture":
-            return take_picture()
+        if name == "identify_animal":
+            return identify_animal()
         if name == "send_whatsapp":
             return send_whatsapp(arguments["message"])
         if name == "write_memory":
@@ -305,8 +304,6 @@ def agent(prompt: str, max_turns: int=10) -> str:
         messages.append({"role": "user", "content": tool_results})
 
     raise RuntimeError(f"Agent did not terminate within {max_turns} turns.")
-
-agent('send me a whatsapp message saying "hello"')
 
 print("Warming up the motion sensor for 30s....")
 sleep(30)

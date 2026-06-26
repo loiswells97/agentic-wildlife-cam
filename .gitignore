@@ -219,6 +219,7 @@ __marimo__/
 
 
 temp/*
+models/*.tflite
 .lgd-nfy0
 
 memory/*
