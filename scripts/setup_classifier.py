@@ -1,23 +1,47 @@
 #!/usr/bin/env python3
 """Download the TFLite classifier model and ImageNet labels for identify_animal."""
 
+import tarfile
+import tempfile
 import urllib.request
 from pathlib import Path
 
-MODEL_URL = (
-    "https://storage.googleapis.com/download.tensorflow.org/models/tflite/"
-    "mobilenet_v1_1.0_224_quant.tflite"
+# Old /models/tflite/... URLs now return 403; this tarball still works.
+MODEL_TGZ_URL = (
+    "https://storage.googleapis.com/download.tensorflow.org/models/"
+    "mobilenet_v1_2018_08_02/mobilenet_v1_1.0_224_quant.tgz"
 )
 LABELS_URL = (
-    "https://storage.googleapis.com/download.tensorflow.org/data/"
-    "imagenet_mobilenet_v1_1000_labelmap.txt"
+    "https://raw.githubusercontent.com/pytorch/hub/master/imagenet_classes.txt"
 )
+
+USER_AGENT = "agentic-wildlife-cam/1.0"
 
 
 def download(url: str, dest: Path) -> None:
-    print(f"Downloading {dest.name}...")
-    urllib.request.urlretrieve(url, dest)
+    print(f"Downloading {url} ...")
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request) as response, dest.open("wb") as out:
+        out.write(response.read())
     print(f"Saved to {dest}")
+
+
+def download_model(model_path: Path) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = Path(tmp) / "model.tgz"
+        download(MODEL_TGZ_URL, archive)
+
+        print("Extracting model...")
+        with tarfile.open(archive, "r:gz") as tar:
+            member = next(
+                m for m in tar.getmembers() if m.name.endswith("mobilenet_v1_1.0_224_quant.tflite")
+            )
+            extracted = tar.extractfile(member)
+            if extracted is None:
+                raise RuntimeError("Could not extract model from archive")
+            model_path.write_bytes(extracted.read())
+
+    print(f"Model ready at {model_path}")
 
 
 def main() -> None:
@@ -28,7 +52,7 @@ def main() -> None:
     labels_path = models_dir / "animal_labels.txt"
 
     if not model_path.exists():
-        download(MODEL_URL, model_path)
+        download_model(model_path)
     else:
         print(f"Model already exists at {model_path}")
 
