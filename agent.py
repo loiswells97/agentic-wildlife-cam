@@ -14,7 +14,7 @@ from picamzero import Camera
 from datetime import datetime
 import threading
 from time import sleep
-
+from classifier import classify_image
 
 cam = Camera()
 
@@ -34,18 +34,27 @@ pir = MotionSensor(os.getenv("MOTION_SENSOR_PIN"))
 _buzzer_lock = threading.Lock()
 
 TOOLS = [
-    {
-        "name": "start_video",
-        "description": "Take a 10 second recording, returns content of video",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
-        "name": "take_picture",
-        "description": "Take a picture, returns content of the image",
+    # {
+    #     "name": "start_video",
+    #     "description": "Take a 10 second recording, returns content of video",
+    #     "input_schema": {
+    #         "type": "object",
+    #         "properties": {},
+    #         "required": []
+    #     }
+    # },
+    # {
+    #     "name": "take_picture",
+    #     "description": "Take a picture, returns content of the image",
+    #     "input_schema": {
+    #         "type": "object",
+    #         "properties": {},
+    #         "required": []
+    #     }
+    # },
+        {
+        "name": "identify_animal",
+        "description": "Take a photo with the camera and classify the animal using a local model. Returns the animal name and confidence score (0-1). Call again if confidence is low or the result is unknown.",
         "input_schema": {
             "type": "object",
             "properties": {},
@@ -202,6 +211,21 @@ def check_for_motion():
     else:
         return "No motion detected"
 
+def identify_animal():
+    """Take a photo and return local classifier result as text for the LLM."""
+    Path("temp").mkdir(exist_ok=True)
+    picture_path = Path("temp/picture.jpg")
+
+    if picture_path.exists():
+        picture_path.unlink()
+
+    cam.take_photo(str(picture_path))
+    result = classify_image(str(picture_path))
+
+    animal = result["animal"]
+    confidence = result["confidence"]
+    return f"animal={animal}, confidence={confidence}"
+
 def take_picture():
     """Take a picture and return the image"""
     
@@ -266,6 +290,8 @@ def run_tool(name: str, arguments: dict):
             return check_for_motion()
         if name == "take_picture":
             return take_picture()
+        if name == "identify_animal":
+            return identify_animal()
         if name == "send_whatsapp":
             return send_whatsapp(arguments["message"])
         if name == "write_memory":
