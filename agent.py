@@ -3,15 +3,18 @@ import dotenv
 import base64
 from pathlib import Path
 import subprocess
+import json
 from gpiozero import MotionSensor
 from gpio import play_buzzer_tune, play_rgb_led_pattern, check_motion_sensor
 from twilio.rest import Client
 import os
+import platform
 
 from picamzero import Camera
 from datetime import datetime
 import threading
 from time import sleep
+
 
 cam = Camera()
 
@@ -216,6 +219,15 @@ def take_picture():
     })
     return blocks
 
+def load_memory_json() -> dict:
+    p = Path("memory.json")
+    if p.exists():
+        return json.loads(p.read_text())
+    return {"preferences": [], "conversation_history": []}
+
+def save_memory_json(data: dict):
+    Path("memory.json").write_text(json.dumps(data, indent=2))
+
 def send_whatsapp(message: str):
     client = Client(
         ACCOUNT_SID,
@@ -227,6 +239,11 @@ def send_whatsapp(message: str):
         to=MY_WHATSAPP,
         body=message
     )
+
+    # Record outbound message so the webhook server has full conversation context
+    mem = load_memory_json()
+    mem["conversation_history"].append({"role": "assistant", "content": message})
+    save_memory_json(mem)
 
     return "WhatsApp message sent"
 
@@ -305,8 +322,10 @@ print("Ready...")
 while True:
     if pir.motion_detected:
         prompt = Path("prompts/wildlife_cam.md").read_text()
-        memory = Path("memory/wildlife_cam.md").read_text()
-        prompt_with_memory = f"{prompt}\n\nMemory:\n{memory}"
+        sightings = Path("memory/wildlife_cam.md").read_text()
+        mem = load_memory_json()
+        prefs = "\n".join(mem["preferences"]) if mem["preferences"] else "None recorded yet."
+        prompt_with_memory = f"{prompt}\n\nUser preferences (from WhatsApp replies):\n{prefs}\n\nPast sightings log:\n{sightings}"
         print(prompt_with_memory)
         agent(prompt_with_memory)
     else:

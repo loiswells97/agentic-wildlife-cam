@@ -222,4 +222,7 @@ temp/*
 models/*.tflite
 .lgd-nfy0
 
+mock_camera.py
+memory.json
+.venv.old
 memory/*
