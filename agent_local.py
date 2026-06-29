@@ -1,26 +1,32 @@
+"""Local agent variant: same as agent.py but uses Ollama (qwen3:4b) via Anthropic-compatible API."""
+
 import anthropic
 import dotenv
 import base64
 from pathlib import Path
 import subprocess
-import json
 from gpiozero import MotionSensor
 from gpio import play_buzzer_tune, play_rgb_led_pattern, check_motion_sensor
+from classifier import classify_image
 from twilio.rest import Client
 import os
-import platform
 
 from picamzero import Camera
 from datetime import datetime
 import threading
 from time import sleep
-from classifier import classify_image
 
 cam = Camera()
 
 dotenv.load_dotenv()
 
-anthropic_client = anthropic.Anthropic()
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+LOCAL_MODEL = os.getenv("LOCAL_MODEL", "qwen3:4b")
+
+anthropic_client = anthropic.Anthropic(
+    base_url=OLLAMA_BASE_URL,
+    api_key="ollama",  # required by SDK, ignored by Ollama
+)
 
 ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
@@ -34,25 +40,16 @@ pir = MotionSensor(os.getenv("MOTION_SENSOR_PIN"))
 _buzzer_lock = threading.Lock()
 
 TOOLS = [
-    # {
-    #     "name": "start_video",
-    #     "description": "Take a 10 second recording, returns content of video",
-    #     "input_schema": {
-    #         "type": "object",
-    #         "properties": {},
-    #         "required": []
-    #     }
-    # },
-    # {
-    #     "name": "take_picture",
-    #     "description": "Take a picture, returns content of the image",
-    #     "input_schema": {
-    #         "type": "object",
-    #         "properties": {},
-    #         "required": []
-    #     }
-    # },
-        {
+    {
+        "name": "start_video",
+        "description": "Take a 10 second recording, returns content of video",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
         "name": "identify_animal",
         "description": "Take a photo with the camera and classify the animal using a local model. Returns the animal name and confidence score (0-1). Call again if confidence is low or the result is unknown.",
         "input_schema": {
@@ -226,32 +223,6 @@ def identify_animal():
     confidence = result["confidence"]
     return f"animal={animal}, confidence={confidence}"
 
-def take_picture():
-    """Take a picture and return the image"""
-    
-    # Clear any pictures from a previous run
-    for old in Path("temp").glob("picture.jpg"):
-        old.unlink()
-
-    cam.take_photo("temp/picture.jpg")
-
-    blocks = [{"type": "text", "text": "Picture taken:"}]
-    data = base64.standard_b64encode(Path("temp/picture.jpg").read_bytes()).decode("utf-8")
-    blocks.append({
-        "type": "image",
-        "source": {"type": "base64", "media_type": "image/jpeg", "data": data},
-    })
-    return blocks
-
-def load_memory_json() -> dict:
-    p = Path("memory.json")
-    if p.exists():
-        return json.loads(p.read_text())
-    return {"preferences": [], "conversation_history": []}
-
-def save_memory_json(data: dict):
-    Path("memory.json").write_text(json.dumps(data, indent=2))
-
 def send_whatsapp(message: str):
     client = Client(
         ACCOUNT_SID,
@@ -263,11 +234,6 @@ def send_whatsapp(message: str):
         to=MY_WHATSAPP,
         body=message
     )
-
-    # Record outbound message so the webhook server has full conversation context
-    mem = load_memory_json()
-    mem["conversation_history"].append({"role": "assistant", "content": message})
-    save_memory_json(mem)
 
     return "WhatsApp message sent"
 
@@ -288,8 +254,6 @@ def run_tool(name: str, arguments: dict):
             return show_rgb_led_pattern(arguments["pattern"])
         if name == "check_for_motion":
             return check_for_motion()
-        if name == "take_picture":
-            return take_picture()
         if name == "identify_animal":
             return identify_animal()
         if name == "send_whatsapp":
@@ -307,7 +271,7 @@ def agent(prompt: str, max_turns: int=10) -> str:
         print(f"\n--- Turn {turn} ---")
 
         response = anthropic_client.messages.create(
-            model="claude-sonnet-4-6",
+            model=LOCAL_MODEL,
             max_tokens=1024,
             tools=TOOLS,
             messages=messages,
@@ -348,10 +312,8 @@ print("Ready...")
 while True:
     if pir.motion_detected:
         prompt = Path("prompts/wildlife_cam.md").read_text()
-        sightings = Path("memory/wildlife_cam.md").read_text()
-        mem = load_memory_json()
-        prefs = "\n".join(mem["preferences"]) if mem["preferences"] else "None recorded yet."
-        prompt_with_memory = f"{prompt}\n\nUser preferences (from WhatsApp replies):\n{prefs}\n\nPast sightings log:\n{sightings}"
+        memory = Path("memory/wildlife_cam.md").read_text()
+        prompt_with_memory = f"{prompt}\n\nMemory:\n{memory}"
         print(prompt_with_memory)
         agent(prompt_with_memory)
     else:

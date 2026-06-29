@@ -41,6 +41,7 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 videodev2==0.0.4
 twilio>=9,<10
+tflite-runtime>=2.14.0; platform_machine == "aarch64"
 aiofiles==25.1.0
 fastapi==0.137.2
 ngrok==1.4.0
